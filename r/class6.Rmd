@@ -21,9 +21,9 @@ library(tidyr)
 ## The Kaplan-Meier plot and proportional hazards.
 
 ```{r read}
-fn <- "~/survival-models/bin/whas500.RData"
+fn <- "../data/whas500.RData"
 load(fn)
-fn <- "~/survival-models/bin/heroin.RData"
+fn <- "../../data/heroin.RData"
 load(fn)
 head(heroin)
 table(heroin$status)
