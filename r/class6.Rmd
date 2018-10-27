@@ -21,10 +21,30 @@ library(tidyr)
 ## The Kaplan-Meier plot and proportional hazards.
 
 ```{r read}
-fn <- "../data/whas500.RData"
+fn <- "../../data/whas500.RData"
 load(fn)
-fn <- "../../data/heroin.RData"
-load(fn)
+fn <- "../../data/heroin.txt"
+heroin_0 <- read.table(file=fn, skip=1, as.is=TRUE)
+v_list <- c(
+  "id", 
+  "clinic", 
+  "status", 
+  "time", 
+  "prison_record", 
+  "methadone_dose")
+names(heroin_0) <- rep(v_list, 2)
+head(heroin_0)
+heroin <- rbind(heroin_0[ , 1:6], heroin_0[ , 7:12])
+heroin$status <- factor(
+  heroin$status, 
+  levels=0:1, 
+  labels=c("Censored", "Departed"))
+heroin$dose_group <- cut(
+  heroin$methadone_dose,
+  breaks=c(0, 50, 60, 999),
+  labels=c("0-50", "51-60", "61+"))
+heroin$time_yrs <- heroin$time / 365.25;
+table(heroin$methadone_dose, heroin$dose_group)
 head(heroin)
 table(heroin$status)
 summary(heroin)
@@ -32,7 +52,7 @@ summary(heroin)
 
 ```{r km-plots, fig.width=4.5, fig.height=2.5}
 heroin                                      %$%
-  Surv(time_yrs, status=="departed")        -> heroin_surv
+  Surv(time_yrs, status=="Departed")        -> heroin_surv
 
 heroin                                      %$%
   survfit(heroin_surv~clinic)               %>%
@@ -86,7 +106,7 @@ km_dose                               %>%
 ```{r schoenfeld, fig.width=4.5, fig.height=2.5}
 par(mar=c(2.6, 4.1, 0.6, 0.6))
 cox_mv <- coxph(
-  heroin_surv~clinic+i_prison+methadone_dose,
+  heroin_surv~clinic+prison_record+methadone_dose,
   data=heroin)
 cox_schoenfeld <- cox.zph(cox_mv)
 print(cox_schoenfeld)
@@ -101,7 +121,7 @@ If one of the variables in your model is a nuisance variable, but it could possi
 par(mar=c(2.6, 2.6, 0.6, 0.6))
 cox_strata <- coxph(
   heroin_surv ~
-    i_prison +
+    prison_record +
     methadone_dose +
   strata(clinic),
   data=heroin)
@@ -111,7 +131,7 @@ summary(cox_strata)
 n <- data.frame(
   methadone_dose=mean(heroin$methadone_dose),
   clinic=c(1, 1, 2, 2),
-  i_prison=c(0, 1, 0, 1))
+  prison_record=c(0, 1, 0, 1))
 
 cox_predict <- survfit(cox_strata, newdata=n)
 plot(
@@ -140,7 +160,7 @@ tt_clinic <- coxph(
   heroin_surv~
     clinic +
     tt(clinic) +
-    i_prison +
+    prison_record +
     methadone_dose,
   tt=function(x, t, ...) x*t,
   data=heroin)
@@ -215,123 +235,15 @@ cox_time_varying <- coxph(
   data=jasa1)
 
 print(cox_time_varying)
-```
 
-Page 221 of Hosmer, Lemeshow, and May describes the grace data set, which you can use for time-varying covariates.
-
-
-```{r read-grace, eval=FALSE}
-fn <- "~/survival-models/data/wiley/GRACE1000.dat" 
-grace <- read.table(fn, header = FALSE) 
-names(grace) <- c(
-  "id",
-  "days",
-  "death",
-  "revasc",
-  "revascdays",
-  "los",
-  "age",
-  "sysbp",
-  "stchange")
-head(grace)
-```
-
-```{r extras, eval=FALSE}
-whas500 %$% Surv(time_yrs, fstat=="Dead") -> whas500_surv
-bmi_cuts <- c(0, 25, 30, 35, 99)
-whas500                                     %>%
-  mutate(bmi_categories=cut(bmi, bmi_cuts)) %$%
-  survfit(whas500_surv~bmi_categories)      %>%
-  tidy                                      -> km_bmi
-km_bmi                                      %>%
-  ggplot(aes(time, estimate, color=strata))  +
-    geom_step()
-
-age_cuts <- c(0, 60, 70, 80, 999)
-whas500                                     %>%
-  mutate(age_categories=cut(age, age_cuts)) %$%
-  survfit(whas500_surv~age_categories)      %>%
-  tidy                                      -> km_age
-km_age                                      %>%
-  ggplot(aes(time, estimate, color=strata))  +
-    geom_step()
-
-hr_cuts <- c(0, 70, 85, 100, 999)
-whas500                                    %>%
-  mutate(hr_categories=cut(hr, hr_cuts))   %$%
-  survfit(whas500_surv~hr_categories)      %>%
-  tidy                                      -> km_hr
-km_hr                                       %>%
-  ggplot(aes(time, estimate, color=strata))  +
-    geom_step()
-
-diasbp_cuts <- c(0, 60, 70, 80, 999)
-whas500                                     %>%
-  mutate(
-    diasbp_categories=
-      cut(diasbp, diasbp_cuts))             %$%
-  survfit(whas500_surv~diasbp_categories)   %>%
-  tidy                                      -> km_diasbp
-km_diasbp                                   %>%
-  ggplot(aes(time, estimate, color=strata))  +
-    geom_step()
-
-whas500                                     %$%
-  survfit(whas500_surv~gender)              %>%
-  tidy                                      -> km_gender
-km_gender                                   %>%
-  ggplot(aes(time, estimate, color=strata))  +
-    geom_step()
-
-whas500                                     %$%
-  survfit(whas500_surv~chf)                 %>%
-  tidy                                      -> km_chf
-km_chf                                      %>%
-  ggplot(aes(time, estimate, color=strata))  +
-    geom_step()
-km_bmi                                %>%
-  mutate(cll=log(-log(estimate)))     %>%
-  ggplot(aes(time, cll, color=strata)) +
-    geom_step()
-
-km_age                                %>%
-  mutate(cll=log(-log(estimate)))     %>%
-  ggplot(aes(time, cll, color=strata)) +
-    geom_step()
-
-km_hr                                 %>%
-  mutate(cll=log(-log(estimate)))     %>%
-  ggplot(aes(time, cll, color=strata)) +
-    geom_step()
-
-km_diasbp                             %>%
-  mutate(cll=log(-log(estimate)))     %>%
-  ggplot(aes(time, cll, color=strata)) +
-    geom_step()
-
-km_gender                             %>%
-  mutate(cll=log(-log(estimate)))     %>%
-  ggplot(aes(time, cll, color=strata)) +
-    geom_step()
-
-km_chf                                %>%
-  mutate(cll=log(-log(estimate)))     %>%
-  ggplot(aes(time, cll, color=strata)) +
-    geom_step()
-cox_mv <- coxph(
-  Surv(time_yrs, fstat=="Dead") ~
-    bmi +
-    age +
-    gender,
-  data=whas500)
-cox_schoenfeld <- cox.zph(cox_mv)
-print(cox_schoenfeld)
-plot(cox_schoenfeld)
-
+fn <- "../../data/transplant1.csv"
+write.csv(jasa, file=fn, row.names=FALSE, na=".")
+fn <- "../../data/transplant2.csv"
+write.csv(jasa1, file=fn, row.names=FALSE, na=".")
 ```
 
 Save everything for possible later re-use.
 
 ```{r save-everything}
-save.image("~/survival-models/bin/survival-lecture-6.RData")
+save.image("../../data/class6.RData")
 ```
