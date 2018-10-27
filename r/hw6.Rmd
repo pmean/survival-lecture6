@@ -5,8 +5,6 @@ date: "May 27, 2018"
 output: html_document
 ---
 
-This file does not need any special libraries other than the ones listed below. Many of the data sets in this program use data from Hosmer, Lemeshow, and May. I made one minor change, however, which was to force all the variable names to lower case.
-
 ```{r load-libraries}
 library(broom)
 library(dplyr)
@@ -19,7 +17,7 @@ library(tidyr)
 Open the WHAS500 data set in the software program of your choice.
 
 ```{r read}
-fn <- "~/survival-models/bin/whas500.RData"
+fn <- "../../data/whas500.RData"
 load(fn)
 ```
 
@@ -73,6 +71,7 @@ cox_predict                                            %>%
   mutate(gender=ifelse(strata=="1", "Male", "Female")) %>%
   ggplot(aes(time, estimate, color=gender))             +
     expand_limits(y=0)                                  +
+    expand_limits(x=7)                                  +
     geom_step()
 
 cox_predict                                            %>%
@@ -81,6 +80,7 @@ cox_predict                                            %>%
   mutate(gender=ifelse(strata=="3", "Male", "Female")) %>%
   ggplot(aes(time, estimate, color=gender))             +
     expand_limits(y=0)                                  +
+    expand_limits(x=7)                                  +
     geom_step()
 
 cox_predict                                            %>%
@@ -89,11 +89,12 @@ cox_predict                                            %>%
   mutate(gender=ifelse(strata=="5", "Male", "Female")) %>%
   ggplot(aes(time, estimate, color=gender))             +
     expand_limits(y=0)                                  +
+    expand_limits(x=7)                                  +
     geom_step()
 ```
 
 Save everything for possible later re-use.
 
 ```{r save-everything}
-save.image("~/survival-models/bin/homework-answers-6.RData")
+save.image("../../data/hw6.RData")
 ```
