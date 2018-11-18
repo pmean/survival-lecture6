@@ -1,0 +1,124 @@
+---
+title: "Odd mix of time varying covariates"
+author: "Steve Simon"
+date: "Novemer 18, 2018"
+output: html_document
+---
+
+Someone asked if you could use the time transfer function to model one time varying covariate while using the start-stop coding to model another time varying covariate. While there is no reason in theory that this wouldn't work, let's see what happens in practice.
+
+
+```{r load-libraries}
+suppressWarnings(suppressMessages(library(broom)))
+suppressWarnings(suppressMessages(library(dplyr)))
+suppressWarnings(suppressMessages(library(ggplot2)))
+suppressWarnings(suppressMessages(library(magrittr)))
+suppressWarnings(suppressMessages(library(survival)))
+suppressWarnings(suppressMessages(library(tidyr)))
+```
+
+## The Kaplan-Meier plot and proportional hazards.
+
+```{r read}
+fn <- "../../data/heroin.txt"
+heroin_0 <- read.table(file=fn, skip=1, as.is=TRUE)
+v_list <- c(
+  "id", 
+  "clinic", 
+  "status", 
+  "time", 
+  "prison_record", 
+  "methadone_dose")
+names(heroin_0) <- rep(v_list, 2)
+head(heroin_0)
+heroin <- rbind(heroin_0[ , 1:6], heroin_0[ , 7:12])
+heroin$dose_group <- cut(
+  heroin$methadone_dose,
+  breaks=c(0, 50, 60, 999),
+  labels=c("0-50", "51-60", "61+"))
+heroin$time_yrs <- heroin$time / 365.25;
+table(heroin$methadone_dose, heroin$dose_group)
+head(heroin)
+table(heroin$status)
+summary(heroin)
+```
+
+Let's create a new variable to help illustrate the odd mix of time varying covariates in the heroin data set. This is a totally fictional variable, and it is only intended to illustrate a point.
+
+Let's presume that every patient in the study has the possibility of transitioning from inpatient treatment to outpatient treatment and let's also suppose that the time of this transition is proportional to the methadone dose. This implies that lower doses make the transition faster.
+
+This implicitly splits the data into two groups. Those who were discharged or censored before they could make the transition to outpatient and those who did make the transition. The latter group has two records, one for time at risk while an inpatient and the other for time at risk while an outpatient.
+
+```{r create-new}
+
+heroin %>%
+  mutate(t_move=runif(238)+methadone_dose/360) -> heroin_1
+head(heroin_1)
+
+heroin_1 %>%
+  filter(time_yrs > t_move) %>%
+  mutate(t0=0) %>%
+  mutate(t1=t_move) %>%
+  mutate(setting=1) %>%
+  mutate(discharge=0) -> move_pre
+heroin_1 %>%
+  filter(time_yrs >  t_move) %>%
+  mutate(t0=t_move) %>%
+  mutate(t1=time_yrs) %>%
+  mutate(setting=2) %>%
+  mutate(discharge=status) -> move_post
+heroin_1 %>%
+  filter(time_yrs <= t_move) %>% 
+  mutate(t0=0) %>%
+  mutate(t1=time_yrs) %>%
+  mutate(setting=1) %>%
+  mutate(discharge=status) -> move_none
+move_pre %>%
+  bind_rows(move_post) %>%
+  bind_rows(move_none) %>%
+  select(
+    id, clinic, t0, t1, 
+    setting, discharge, 
+    prison_record) %>%
+  arrange(id, t0) -> move_data
+table(move_data$setting, move_data$discharge)
+```
+
+```{r km-plots, fig.width=4.5, fig.height=2.5}
+move_data                                   %$%
+  Surv(t0, t1, discharge, type="counting")  -> move_surv
+
+move_data                                   %$%
+  survfit(move_surv~clinic)                 %>%
+  tidy                                      -> km_clinic
+
+km_clinic                                   %>%
+  ggplot(aes(time, estimate, color=strata))  +
+    expand_limits(y=0)                       +
+    geom_step()
+
+move_data                                   %$%
+  survfit(move_surv~setting)                %>%
+  tidy                                      -> km_setting
+
+km_setting                                  %>%
+  ggplot(aes(time, estimate, color=strata))  +
+    expand_limits(y=0)                       +
+    geom_step()
+```
+
+```{r odd-mix}
+tt_clinic <- coxph(
+  move_surv~
+    setting +
+    clinic +
+    tt(clinic) +
+    prison_record,
+  tt=function(x, t, ...) x*t,
+  data=move_data)
+tt_clinic
+```
+
+```{r save-everything}
+save.image("../../data/odd_mix.RData")
+```
