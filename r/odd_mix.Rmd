@@ -50,10 +50,8 @@ Let's presume that every patient in the study has the possibility of transitioni
 This implicitly splits the data into two groups. Those who were discharged or censored before they could make the transition to outpatient and those who did make the transition. The latter group has two records, one for time at risk while an inpatient and the other for time at risk while an outpatient.
 
 ```{r create-new}
-
 heroin %>%
   mutate(t_move=runif(238)+methadone_dose/360) -> heroin_1
-head(heroin_1)
 
 heroin_1 %>%
   filter(time_yrs > t_move) %>%
@@ -81,6 +79,7 @@ move_pre %>%
     setting, discharge, 
     prison_record) %>%
   arrange(id, t0) -> move_data
+head(move_data, 12)
 table(move_data$setting, move_data$discharge)
 ```
 
